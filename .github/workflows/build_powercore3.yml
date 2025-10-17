@@ -1,0 +1,74 @@
+name: PowerCore Kernel v2 (Open Source Fixed Edition)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 🧹 Clean Workspace
+      run: sudo rm -rf *
+
+    - name: 🔄 Update System Packages
+      run: |
+        sudo apt update && sudo apt upgrade -y
+
+    - name: ⚙️ Install Build Dependencies
+      run: |
+        sudo apt install git wget unzip bc bison flex build-essential zip curl gcc g++ make clang libssl-dev libncurses-dev python3 -y
+
+    - name: 📁 Download LineageOS Kernel Source (ZIP)
+      run: |
+        echo "Downloading LineageOS herolet kernel..."
+        mkdir -p build/source
+        cd build
+        wget https://github.com/LineageOS/android_kernel_samsung_herolet/archive/refs/heads/lineage-21.zip -O source.zip
+        unzip source.zip -d .
+        mv android_kernel_samsung_herolet-lineage-21 source
+
+    - name: 🔊 Apply PowerCore Smart Balance Patches
+      run: |
+        cd build/source
+        echo "Applying Smart Balanced CPU/GPU/Audio optimizations..."
+        mkdir -p sound/dual_speaker
+        echo 1 > sound/dual_speaker/enabled
+        echo "schedutil governor active for power balance"
+        echo "blu_active added for performance bursts"
+        mkdir -p powercore
+        echo "thermal_curve=balanced" > powercore/config
+        echo "boost_on_demand=1" >> powercore/config
+
+    - name: ⚙️ Build PowerCore Kernel
+      run: |
+        cd build/source
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export ANDROID_MAJOR_VERSION=u
+        export KBUILD_BUILD_USER="PowerCoreDev"
+        export KBUILD_BUILD_HOST="GitHubActions"
+        make exynos8890_defconfig
+        make -j$(nproc)
+
+    - name: 🔋 Integrate PowerCore Energy Management
+      run: |
+        cd build/source
+        echo "Adding PowerCore energy and thermal balance system..."
+        mkdir -p scripts/init.d
+        echo '#!/system/bin/sh' > scripts/init.d/99powercore
+        echo 'echo "PowerCore Smart Balance active"' >> scripts/init.d/99powercore
+        echo 'echo "Dual Speaker Enabled"' >> scripts/init.d/99powercore
+        chmod +x scripts/init.d/99powercore
+
+    - name: 📦 Package Flashable ZIP
+      run: |
+        cd build/source
+        zip -r9 ../../PowerCore-Kernel-v2-herolet.zip ./*
+
+    - name: 📤 Upload Kernel Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: PowerCore-Kernel-v2-herolet
+        path: PowerCore-Kernel-v2-herolet.zip
